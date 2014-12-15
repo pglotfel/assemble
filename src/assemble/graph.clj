@@ -126,62 +126,6 @@
             graph' (reduce (fn [g v] (update-in g [n :edges] disj v)) graph m)]     
         (recur graph' (conj l n) (concat (rest s) (filter (comp #(not (incoming? graph' %)) m) (keys graph'))))))))
 
-(defn- dfs-visit 
-  ([graph node time] (dfs-visit graph node time nil))
-  ([graph node time tree] 
-    (if tree 
-      (conj! tree node))   
-    (->       
-      (reduce (fn [graph vertex]                 
-                (if-not (or (:start-time (vertex graph)) (:end-time (vertex graph)))           
-                  (dfs-visit graph vertex time tree)              
-                  graph))       
-              (assoc-in graph [node :start-time] (swap! time inc))            
-              (:edges (node graph)))     
-      (assoc-in [node :end-time] (swap! time inc)))))
-
-(defn dfs  
-  [graph] 
-  (let [time (atom 0)]
-    (reduce (fn [graph vertex]            
-              (if-not (or (:start-time (vertex graph)) (:end-time (vertex graph)))        
-                (dfs-visit graph vertex time nil)             
-                graph))            
-            graph           
-            (keys graph))))
-
-(defn dfs-tree  
-  [graph & {:keys [order] :or {order (vec (keys graph))}}] 
-  (let [time (atom 0)      
-        trees (vec (repeatedly (count order) (comp transient vector)))]   
-    (reduce-kv (fn [graph cardinal vertex]            
-                 (if-not (or (:start-time (vertex graph)) (:end-time (vertex graph)))            
-                   (dfs-visit graph vertex time (trees cardinal))           
-                   graph))            
-               graph            
-               order)    
-    (map persistent! trees)))
-              
-(defn- tally-dfs   
-  [dfs-result]   
-  (->>   
-    (map (fn [[k v]]            
-           [k (:end-time v)])         
-         dfs-result)    
-    (sort-by second)   
-    (map first)    
-    reverse))
-  
-(defn strongly-connected-components  
-  "Finds strongly connected components using an implmentation of Kosaraju's algorithm http://en.wikipedia.org/wiki/Kosaraju%27s_algorithm"
-  [graph transpose-graph]  
-  (->>  
-    (->   
-      (dfs graph)  
-      tally-dfs     
-      vec)
-    (dfs-tree transpose-graph :order)))
-
 (defn fvs 
   "Calculates an fvs given a graph by implementing a slightly altered version of the algorithm described in http://www.sciencedirect.com/science/article/pii/002001909390079O"
   [graph]
@@ -212,16 +156,6 @@
         (println "WARNING: cycles may not start correctly!")
         result))))
 
-;Set the preorder number of v to C, and increment C.
-;Push v onto S and also onto P.
-;For each edge from v to a neighboring vertex w:
-;If the preorder number of w has not yet been assigned, recursively search w;
-;Otherwise, if w has not yet been assigned to a strongly connected component:
-;Repeatedly pop vertices from P until the top element of P has a preorder number less than or equal to the preorder number of w.
-;If v is the top element of P:
-;Pop vertices from S until v has been popped, and assign the popped vertices to a new component.
-;Pop v from P.
-
 (defn- containsv? 
   [coll key]
   (reduce 
@@ -232,16 +166,16 @@
     false 
     coll))
 
-;Clojurefy this if possible!
+;Make this implementation more functional
 
 (defn dijkstras
   "Implementation of Dijkstra's strongly connected component algorithm described in http://en.wikipedia.org/wiki/Path-based_strong_component_algorithm"
   ([graph]    
-    (let [graph (atom graph) 
-          c (atom 0)
-          s (atom []) 
-          p (atom [])
-          components (atom [])]
+    (let [graph (volatile! graph) 
+          c (volatile! 0)
+          s (volatile! []) 
+          p (volatile! [])
+          components (volatile! [])]
       (doseq [v (keys @graph)]
         (if-not (:preorder (v @graph))
           (dijkstras graph v c s p components)))
@@ -250,10 +184,10 @@
       
       (let [edges (:edges (v @graph))]      
             
-        (swap! graph update-in [v] (fn [x] (assoc x :preorder @c)))
-        (swap! c inc)      
-        (swap! s conj v)
-        (swap! p conj v)
+        (vswap! graph update-in [v] (fn [x] (assoc x :preorder @c)))
+        (vswap! c inc)      
+        (vswap! s conj v)
+        (vswap! p conj v)
       
         (doseq [w edges]   
           (if (:preorder (w @graph))
@@ -262,7 +196,7 @@
                 (loop [p' @p]
                   (when (> (:preorder ((last p') @graph)) (:preorder (w @graph)))
                     (do 
-                      (swap! p pop)
+                      (vswap! p pop)
                       (recur @p))))))
             (dijkstras graph w c s p components)))
 
@@ -270,12 +204,12 @@
           (loop [s' @s cs []]
             (if (= (last s') v)
               (do 
-                (swap! s pop)
-                (swap! components conj (conj cs v)))
+                (vswap! s pop)
+                (vswap! components conj (conj cs v)))
               (do 
-                (swap! s pop)
+                (vswap! s pop)
                 (recur @s (conj cs (last s'))))))
-          (swap! p pop)))))
+          (vswap! p pop)))))
   
                 
   

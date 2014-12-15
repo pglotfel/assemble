@@ -13,21 +13,31 @@
   (fn [env vertex step con]
     (:type vertex)))
 
+;#### A vertex in a cycle ####
+
 (defmethod parse-vertex :cyclic
   [env {:keys [title _ _]} step _]
   (assoc env title (step)))
+
+;#### A vertex with only outgoing edges ####
 
 (defmethod parse-vertex :source
   [env {:keys [title _ _]} step _]
   (assoc env title (step)))
 
+;#### A vertex with only incoming edges ####
+
 (defmethod parse-vertex :sink
   [env {:keys [title generator transform dependencies]} _ _] 
   (assoc env title (apply (generator transform) (map env dependencies))))
 
+;#### A vertex with outgoing and incoming edges ####
+
 (defmethod parse-vertex :flow
   [env {:keys [title generator transform dependencies]} _ _]  
   (assoc env title (apply (generator transform) (map env dependencies))))
+
+;#### A vertex that has had its output aliased ####
 
 (defmethod parse-vertex :aliased 
   [env {:keys [title generator transform dependencies]} _ con] 
@@ -52,35 +62,63 @@
                      dependencies))))
 
 (defn- dependents
-  [veticies t] 
+  [verticies t] 
   "Returns a set containing the dependents of a given vertex"
   (reduce      
     (fn [coll {:keys [title dependencies]}]              
-      (if (some #{t} dependencies) (conj coll title) coll)) #{} veticies))
+      (if (some #{t} dependencies) (conj coll title) coll)) #{} verticies))
 
 (defn- make-graph 
   "Makes a graph out of the given verticies"
-  [veticies] 
+  [verticies] 
   (reduce (fn [m {:keys [title]}]                      
-            (assoc m title {:edges (dependents veticies title)}))                     
-          {} veticies))
+            (assoc m title {:edges (dependents verticies title)}))                     
+          {} verticies))
 
 (def ^{:private true} o {:title nil :dependencies nil :generator nil :transform nil :group nil})
 
 (defn vertex
+  
+  "Pass in a title, dependencies, generator, transform, and, optionally, a group to create a vertex.
+   In this case, a vertex is simply a hashmap with entries corresponding to the supplied arguments.  
+
+  {:title :t
+   :dependencies []
+   :generator (fn [f])
+   :transform (fn [x])
+   :group :verticies}
+
+   Title is an identifier that uniquely defines the vertex. 
+   
+   Dependencies are the dependencies of the current vertex.  That is, titles of other vertices. 
+ 
+   A generator is a function that returns a function describing how the output of the vertex is created. 
+
+   The transform describes the functionality of the vertex over supplied inputs.  When assembled, the transform is
+   passed as an argument to the generator function. 
+
+   Group defines a specific group to which a vertex belongs.  This group can be required in the dependencies using a vector:
+   [[:group]].  Additionally, the following keywords can be applied to group dependencies: 
+   [[:group :only [:vertex]]] [:group :without [:vertex]]] to require or exclude certain vertices."
+  
   ([title dependencies generator transform] (vertex title dependencies generator transform nil))
   ([title dependencies generator transform group]
     (assoc o :title title :dependencies dependencies :generator generator :transform transform :group group)))
     
 (defn assemble 
-  [step con & veticies] 
+  [step con & verticies] 
   
   ;Implement some checks...
  
-  (let [ts (map :title veticies)]
+  (let [ts (map :title verticies)]
     (assert (= (count ts) (count (distinct ts))) "Each vertex must have a distinct name!"))
   
-  (let [compiler (fn [env o] (parse-vertex env o step con))   
+  (doseq [v verticies]
+    (let [deps (:dependencies v)
+          pred (set deps)]
+      (assert (>= (count (filter (comp pred :title) verticies)) (count deps)) (str "Node " (:title v) "'s dependencies are not all in the supplied verticies."))))
+  
+  (let [compiler (fn [env v] (parse-vertex env v step con))   
              
         ;#### Expand dependencies and infer types! ####
        
@@ -90,11 +128,11 @@
                                                   (if group 
                                                     (update-in m [group] (fn [x] (conj x title))) 
                                                     m)) 
-                                                {} veticies)
+                                                {} verticies)
                                         
-                                        (assoc :all (mapv :title veticies)))
+                                        (assoc :all (mapv :title verticies)))
                         
-                               deps-expanded (map (fn [o] (assoc o :dependencies (expand-dependencies groups (:dependencies o)))) veticies) 
+                               deps-expanded (map (fn [v] (assoc v :dependencies (expand-dependencies groups (:dependencies v)))) verticies) 
                         
                                graph (make-graph deps-expanded)
                         
@@ -104,7 +142,7 @@
                         
                                sccs (->>
                                       
-                                      (g/strongly-connected-components graph (g/transpose graph))                                                                      
+                                      (g/dijkstras graph)                                                                      
                                                                        
                                       (remove
                                         (fn [vals]
@@ -120,26 +158,26 @@
                                    
                                         ;#### Tag components in cycles... ####   
                           
-                                        (fn [o]                            
-                                          (if ((:title o) pred)
-                                            (assoc o :type :cyclic)
-                                            o))
+                                        (fn [v]                            
+                                          (if ((:title v) pred)
+                                            (assoc v :type :cyclic)
+                                            v))
                            
                                         ;#### Infer vertex types! ####
                           
-                                        (fn [o]   
-                                          (if (:type o)
-                                            o
-                                            (let [title (:title o)                                
+                                        (fn [v]   
+                                          (if (:type v)
+                                            v
+                                            (let [title (:title v)                              
                                                   graph-es (:edges (title graph))                               
                                                   transpose-es (:edges (title transpose))]                            
                                               (if (empty? graph-es)
                                                 (if (empty? transpose-es)
                                                   (throw (IllegalArgumentException. (str "You have a vertex, " title ", with no dependencies and no dependents")))
-                                                  (assoc o :type :sink))
+                                                  (assoc v :type :sink))
                                                 (if (empty? transpose-es)
-                                                  (assoc o :type :source) 
-                                                  (assoc o :type :flow))))))) 
+                                                  (assoc v :type :source) 
+                                                  (assoc v :type :flow))))))) 
                          
                                       deps-expanded)])                                 
              
@@ -159,9 +197,9 @@
                 
                                   ;#### Do a topological sort on the remaining nodes #### 
                                  
-                                  (let [non-cyclic (into {} (map (fn [o] [(:title o) o]) 
-                                                                 (remove (fn [o]                 
-                                                                           (let [type (:type o)]
+                                  (let [non-cyclic (into {} (map (fn [v] [(:title v) v]) 
+                                                                 (remove (fn [v]                 
+                                                                           (let [type (:type v)]
                                                                              (or (= type :cyclic) (= type :source) (= type :dam))))                  
                                                                            with-deps)))]
                                           
@@ -173,11 +211,11 @@
                                             
                                       (map non-cyclic)))
                                            
-                                  (map (fn [o] (assoc o :type :aliased)) (concat sources cycles))))]
+                                  (map (fn [v] (assoc v :type :aliased)) (concat sources cycles))))]
        
     ;#### Next, I need to start all of the cycles.  Ooo, side effects! I currently do this by finding a feedback vertex set (FVS) of each cycle ####
    
-    (doseq [o (| (mapcat (fn [group] (g/fvs (make-graph (filter (comp (set group) :title) cycles)))) sccs)
+    (doseq [v (| (mapcat (fn [group] (g/fvs (make-graph (filter (comp (set group) :title) cycles)))) sccs)
               
                  #(filter (comp (set %) :title) cycles) 
               
@@ -185,15 +223,16 @@
               
                  #(filter (comp (set %) :title) cycles))]                     
       
-      (step ((:title o) env) ((:transform o))))
+      (step ((:title v) env) ((:transform v))))
     
-    ;#### Associate streams back into the veticies! ####
-    (map (fn [a b] (assoc a :output ((:title a) env) :type (:type b))) veticies with-deps)))
+    ;#### Associate streams back into the verticies! ####
+
+    (map (fn [a b] (assoc a :output ((:title a) env) :type (:type b))) verticies with-deps)))
 
 (defn output 
   "Retrieves the output of a given body" 
-  [title & veticies]  
-  (:output (find-first #(= (:title %) title) veticies)))
+  [title & verticies]  
+  (:output (find-first #(= (:title %) title) verticies)))
 
   
   
