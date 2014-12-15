@@ -1,4 +1,4 @@
-(defproject assemble "0.1.0"
+(defproject assemble "0.1.0-SNAPSHOT"
   :description "A library for assembling graphs!"
   :url "http://github.com/pglotfel/assemble"
   :license {:name "Eclipse Public License"
