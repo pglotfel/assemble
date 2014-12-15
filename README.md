@@ -35,3 +35,10 @@ The problem here, which I hope is obvious, is that vertex :b could have consumed
 
 One of the major reasons I began programming in clojure was to get away from an idea very similar to this: mutable state.  In my opinion, this trivial example I just described exhibits a form of mutable state.  Just not one with which we're familiar.  
 
+I believe that there exists a simple solution to this issue that I propose with the following diagram: 
+
+![](/images/problematic-example-fixed.png)
+
+As a solution to this "mutable state" problem, I introduce a vertex called :a' (a prime).  This vertex is an exact copy of vertex :a (think ```clojure (map identity ...)```).  However, we tell verticies :b and :c that :a' is, in fact, vertex :a!  This means that we can connect the verticies as follows: 
+
+
