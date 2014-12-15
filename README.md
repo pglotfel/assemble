@@ -11,7 +11,7 @@ Consider the following system:
 
 ![](/images/problematic-example.png)
 
-Now, let's assume that these nodes are connected by channels/streams (e.g., manifold (![](https://github.com/ztellman/manifold)), core.async (![](https://github.com/clojure/core.async)))
+Now, let's assume that these nodes are connected by channels/streams (e.g., [manifold](https://github.com/ztellman/manifold), [core.async](https://github.com/clojure/core.async))
 
 An interesting problem can result depending on the connecting order of these graphs.  Let's assume, for the sake of my example :), that they are connected in random order! 
 
