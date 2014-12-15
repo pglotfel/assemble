@@ -31,7 +31,7 @@ and, finally (!), vertex :a is connected to vertex :c!
 
 ![](/images/problematic-example.png)
 
-The problem here, which I hope is obvious, is that vertex :b could have consumed an unknown amount of information from vertex :a before vertex :a was connected to vertex :c.  
+The problem here, which I hope is obvious, is that vertex :b could have consumed an unknown amount of information from vertex :a before vertex :a was connected to vertex :c.  This result may not be a problem in some cases, but I'll leave it as an exercise to the reader to determine the cases where it might be :). 
 
 One of the major reasons I began programming in clojure was to get away from an idea very similar to this: mutable state.  In my opinion, this trivial example I just described exhibits a form of mutable state.  Just not one with which we're familiar.  
 
@@ -53,6 +53,6 @@ At this point, the system has essentially been fully assembled, but no data has 
 
 ![](/images/problematic-example-fixed-3.png)
 
-
+Now, the data can flow freely, and we don't have to worry about early consumption of data!
 
 
