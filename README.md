@@ -49,4 +49,10 @@ Step two:
 
 ![](/images/problematic-example-fixed-2.png)
 
+At this point, the system has essentially been fully assembled, but no data has started flowing because the "real" vertex :a has not yet been connected to the system.  Let's do that now: 
+
+![](/images/problematic-example-fixed-3.png)
+
+
+
 
