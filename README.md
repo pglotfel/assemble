@@ -18,3 +18,18 @@ An interesting problem can result depending on the connecting order of these gra
 First, let's say vertex :a is connected to vertex :b 
 
 ![](/images/problematic-example-1.png)
+
+And then somet time passes...
+
+and more time...
+
+and yet more...
+
+and, finally (!), vertex :a is connected to vertex :c! 
+
+![](/images/problematic-example.png)
+
+The problem here, which I hope is obvious, is that vertex :b could have consumed an unknown amount of information from vertex :a before vertex :a was connected to vertex :c.  
+
+One of the major reasons I began programming in clojure was to get away from an idea very similar to this: mutable state.  In my opinion, this trivial example I just described exhibits a form of mutable state.  Just not one with which we're familiar.  
+
