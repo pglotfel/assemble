@@ -4,7 +4,7 @@ assemble
 ![](/images/logo.png)
 
 <p align="center">
-  <img /images/logo.png>
+  <img [](/images/logo.png)>
 </p>
 
 This is a library still in progress! :).  But the core functionality has definitely been achieved.  In particular, it advances the concepts described in [watershed](http://github.com/hypower-org/watershed).
