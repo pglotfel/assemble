@@ -9,4 +9,4 @@ The core concept of assemble is creating vertices to represent the functionality
 
 Consider the following system:  
 
-
+![](/images/problematic-example.png)
