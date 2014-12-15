@@ -75,4 +75,32 @@ Assemble actually does exactly this when dealing with systems!  However, it atte
 
 We've gone over an example pictorally, so let's now review it if implemented in watershed.  For this code example, I'll be using [manifold](http://github.com/ztellman/manifold).  
 
+```clojure 
+
+(ns whatever
+  (:require [assemble.core :as a]
+            [manifold.stream :as s]))
+
+```
+Let's add a vertex with assemble! 
+
+```clojure
+
+(a/vertex :a [] (fn [f] (fn [] (s/periodically 1000 f))) (fn [] 1))
+
+```
+Wow, that's a lot of anonymous functions.  I'll break down exactly what's happening: 
+
+The first parameter to a/vertex is the title of the vertex!  Fairly straightforward.  
+
+The following vector are the dependencies of vertex :a.  From our example, we know that vertex :a has no dependencies, so we leave this blank.  
+
+The next function is the "generator" function.  This function takes a function as an argument and returns, essentially, how the vertex outputs its data.  In this case, it's going to use some of the manifold.stream namespace functionality and return a function that will emit the result of applying that function with no arguments every 1000 ms.  That is, ```(s/periodically 1000 f)```, where f is the function to be periodically applied.  
+
+The final function is the main purpose of the vertex.  In this case, it is to create the value 1.  Because of the supplied generator function, this vertex will produce the value 1 every 1000 ms.  
+
+
+
+
+
 
