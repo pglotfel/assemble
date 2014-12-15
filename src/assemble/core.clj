@@ -3,7 +3,7 @@
             [assemble.graph :as g]
             [clojure.set :as st]
             [manifold.stream :as s])
-  (:use [watershed.utils]))
+  (:use [assemble.utils]))
 
 (set! *warn-on-reflection* true)
 
