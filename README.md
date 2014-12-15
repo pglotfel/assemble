@@ -15,3 +15,6 @@ Now, let's assume that these nodes are connected by channels/streams (e.g., [man
 
 An interesting problem can result depending on the connecting order of these graphs.  Let's assume, for the sake of my example :), that they are connected in random order! 
 
+First, let's say vertex :a is connected to vertex :b 
+
+![](/images/problematic-example-1.png)
