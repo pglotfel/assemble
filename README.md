@@ -55,4 +55,8 @@ At this point, the system has essentially been fully assembled, but no data has 
 
 Now, the data can flow freely, and we don't have to worry about early consumption of data!
 
+Assemble actually does exactly this when dealing with systems!  However, it attempts to generalize these input systems using a couple nice graph algorithms which are implemented in the assemble.graph namespace.  
+
+We've gone over an example pictorally, so let's now review it if implemented in watershed.  For this code example, I'll be using [manifold](http://github.com/ztellman/manifold).  
+
 
