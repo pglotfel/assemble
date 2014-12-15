@@ -3,7 +3,7 @@ assemble
 
 ![](/images/logo.png)
 
-This is a library still in progress! :).  But the core functionality has definitely been achieved.
+This is a library still in progress! :).  But the core functionality has definitely been achieved.  In particular, it advances the concepts described in [watershed](http://github.com/hypower-org/watershed).
 
 Assemble is a library for connecting graphs!  This concept has been generalized within this library.  However, I find that I find its functionality useful when dealing with channels.  
 
