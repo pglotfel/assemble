@@ -3,6 +3,8 @@ assemble
 
 ![](/images/logo.png)
 
+This is a library still in progress! :).  But the core functionality has definitely been achieved.
+
 Assemble is a library for connecting graphs!  This concept has been generalized within this library.  However, I find that I find its functionality useful when dealing with channels.  
 
 The core concept of assemble is creating vertices to represent the functionality of some system.  For example, this system could consist of connections between streams.  
@@ -19,7 +21,7 @@ First, let's say vertex :a is connected to vertex :b
 
 ![](/images/problematic-example-1.png)
 
-And then somet time passes...
+And then some time passes...
 
 and more time...
 
