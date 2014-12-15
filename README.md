@@ -41,4 +41,12 @@ I believe that there exists a simple solution to this issue that I propose with 
 
 As a solution to this "mutable state" problem, I introduce a vertex called :a' (a prime).  This vertex is an exact copy of vertex :a (think ```(map identity ...)```).  However, we tell verticies :b and :c that :a' is, in fact, vertex :a!  This means that we can connect the verticies as follows: 
 
+Step one: 
+
+![](/images/problematic-example-fixed-1.png)
+
+Step two: 
+
+![](/images/problematic-example-fixed-2.png)
+
 
