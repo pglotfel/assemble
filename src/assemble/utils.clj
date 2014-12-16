@@ -11,6 +11,16 @@
     false 
     coll))
 
+(defn containsv? 
+  [coll key]
+  (reduce 
+    (fn [contains? v]
+      (if (= v key)
+        (reduced true)
+        contains?))
+    false 
+    coll))
+
 (defn | 
   [init & fns] 
   ((apply comp (reverse fns)) init))

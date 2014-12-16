@@ -1,11 +1,17 @@
 (ns assemble.graph
-  (:require [clojure.set :as s]))
+  (:require [clojure.set :as s])
+  (:use [assemble.utils]))
 
-(defn- incoming? 
+(defn incoming? 
   [graph vertex] 
   (if vertex
     (some (comp vertex :edges) (vals graph))
     true))
+
+(defn outgoing? 
+  [graph vertex] 
+  (> (count (:edges (graph vertex))) 0))
+    
 
 (defn transpose 
   [graph]  
@@ -18,11 +24,11 @@
                                                #{} nodes)}})                    
                       nodes))))
 
-(defn- outgoing 
+(defn outgoing 
   [graph vertex] 
   (:edges (vertex graph)))
 
-(defn- incoming 
+(defn incoming 
   [graph vertex] 
   (reduce-kv 
     (fn [coll k v] 
@@ -155,16 +161,6 @@
       (do 
         (println "WARNING: cycles may not start correctly!")
         result))))
-
-(defn- containsv? 
-  [coll key]
-  (reduce 
-    (fn [contains? v]
-      (if (= v key)
-        (reduced true)
-        contains?))
-    false 
-    coll))
 
 ;Make this implementation more functional
 

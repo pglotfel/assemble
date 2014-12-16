@@ -68,14 +68,14 @@
     (fn [coll {:keys [title dependencies]}]              
       (if (some #{t} dependencies) (conj coll title) coll)) #{} verticies))
 
-(defn- make-graph 
+(defn make-graph 
   "Makes a graph out of the given verticies"
   [verticies] 
   (reduce (fn [m {:keys [title]}]                      
             (assoc m title {:edges (dependents verticies title)}))                     
           {} verticies))
 
-(def ^{:private true} o {:title nil :dependencies nil :generator nil :transform nil :group nil})
+(def ^{:private true} v {:title nil :dependencies nil :generator nil :transform nil :group nil})
 
 (defn vertex
   
@@ -103,7 +103,7 @@
   
   ([title dependencies generator transform] (vertex title dependencies generator transform nil))
   ([title dependencies generator transform group]
-    (assoc o :title title :dependencies dependencies :generator generator :transform transform :group group)))
+    (assoc v :title title :dependencies dependencies :generator generator :transform transform :group group)))
     
 (defn assemble 
   [step con & verticies] 
@@ -221,7 +221,7 @@
               
                  #(mapcat :dependencies %)
               
-                 #(filter (comp (set %) :title) cycles))]                     
+                 #(filter (comp (set %) :title) cycles))]    
       
       (step ((:title v) env) ((:transform v))))
     
