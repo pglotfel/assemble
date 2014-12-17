@@ -22,8 +22,6 @@
   
   manifold-connect
   
-  (a/vertex :unused [] generator (fn []))
-  
   (a/vertex :a [:c] generator
              
              (fn 

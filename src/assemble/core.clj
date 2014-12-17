@@ -7,11 +7,19 @@
 
 (set! *warn-on-reflection* true)
 
+;#### Investigate ways to add more than one type! #### 
+
 ;Multimethods to handle the parsing of each type of vertex
+
+(def ^:private types [:mutable :safe :source :cyclic :sink :flow :aliased])
+
+(defn- type-priority
+  [to-be-sorted] 
+  (sort-by (fn [x] (.indexOf ^clojure.lang.PersistentVector types x) to-be-sorted) to-be-sorted))
 
 (defmulti parse-vertex 
   (fn [env vertex step con]
-    (:type vertex)))
+    (last (:type vertex))))
 
 ;#### A vertex in a cycle ####
 
@@ -101,9 +109,8 @@
    [[:group]].  Additionally, the following keywords can be applied to group dependencies: 
    [[:group :only [:vertex]]] [:group :without [:vertex]]] to require or exclude certain vertices."
   
-  ([title dependencies generator transform] (vertex title dependencies generator transform nil))
-  ([title dependencies generator transform group]
-    (assoc v :title title :dependencies dependencies :generator generator :transform transform :group group)))
+  [title dependencies generator transform & {:keys [group type] :or {group nil type []}}]  
+  (assoc v :title title :dependencies dependencies :generator generator :transform transform :group group :type type))
     
 (defn assemble 
   [step con & verticies] 
@@ -138,7 +145,7 @@
                         
                                transpose (g/transpose graph)
                                
-                               ;Retrieve all of the strongly connected components.  In this case, everything in a cycle.
+                               ;#### Retrieve all of the strongly connected components.  In this case, everything in a cycle. ####
                         
                                sccs (->>
                                       
@@ -154,13 +161,18 @@
                         
                                pred (apply (comp set concat) sccs)]   
                     
-                           [sccs (map (comp                           
+                           [sccs (map (comp     
+                                        
+                                        ;#### Make sure types are prioritized properly. #### 
+                                        
+                                        (fn [v] 
+                                          (update-in v [:type] #(vec (type-priority %))))
                                    
                                         ;#### Tag components in cycles... ####   
                           
                                         (fn [v]                            
                                           (if ((:title v) pred)
-                                            (assoc v :type :cyclic)
+                                            (update-in v [:type] #(conj % :unsafe :cyclic))
                                             v))
                            
                                         ;#### Infer vertex types! ####
@@ -174,18 +186,18 @@
                                               (if (empty? graph-es)
                                                 (if (empty? transpose-es)
                                                   (throw (IllegalArgumentException. (str "You have a vertex, " title ", with no dependencies and no dependents")))
-                                                  (assoc v :type :sink))
+                                                  (update-in v [:type] #(conj % :safe :sink)))
                                                 (if (empty? transpose-es)
-                                                  (assoc v :type :source) 
-                                                  (assoc v :type :flow))))))) 
+                                                  (update-in v [:type] #(conj % :unsafe :source))
+                                                  (update-in v [:type] #(conj % :safe :flow)))))))) 
                          
                                       deps-expanded)])                                 
              
         ;#### Get the sources and cycles for future reference! ####
        
-        sources (filter #(= (:type %) :source) with-deps)
+        sources (filter #(= (last (:type %)) :source) with-deps)
         
-        cycles (filter #(= (:type %) :cyclic) with-deps)
+        cycles (filter #(= (last  (:type %)) :cyclic) with-deps)
                    
         ;#### Compiler passes! ####
              
@@ -199,7 +211,7 @@
                                  
                                   (let [non-cyclic (into {} (map (fn [v] [(:title v) v]) 
                                                                  (remove (fn [v]                 
-                                                                           (let [type (:type v)]
+                                                                           (let [primary-type (last (:type v))]
                                                                              (or (= type :cyclic) (= type :source) (= type :dam))))                  
                                                                            with-deps)))]
                                           
@@ -211,7 +223,7 @@
                                             
                                       (map non-cyclic)))
                                            
-                                  (map (fn [v] (assoc v :type :aliased)) (concat sources cycles))))]
+                                  (map (fn [v] (update-in v [:type] #(assoc % (dec (count %)) :aliased))) (concat sources cycles))))]
        
     ;#### Next, I need to start all of the cycles.  Ooo, side effects! I currently do this by finding a feedback vertex set (FVS) of each cycle ####
    
