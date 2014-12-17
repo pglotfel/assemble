@@ -3,17 +3,20 @@
   (:use [assemble.utils]))
 
 (defn incoming? 
+  "Returns true if the vertex has incoming edges."
   [graph vertex] 
   (if vertex
     (some (comp vertex :edges) (vals graph))
     true))
 
 (defn outgoing? 
+  "Returns true if the vertex has outgoing edges."
   [graph vertex] 
   (> (count (:edges (graph vertex))) 0))
     
 
 (defn transpose 
+  "Returns the transpose of a graph (e.g., directions of all edges reversed)."
   [graph]  
   (let [nodes (keys graph)] 
     (apply merge (map (fn [node]        
@@ -25,10 +28,12 @@
                       nodes))))
 
 (defn outgoing 
+  "Returns the number of outgoing edges of a vertex."
   [graph vertex] 
   (:edges (vertex graph)))
 
 (defn incoming 
+  "Returns the number of incoming edges of a vertex."
   [graph vertex] 
   (reduce-kv 
     (fn [coll k v] 
@@ -39,18 +44,22 @@
     graph))
 
 (defn- sink? 
+  "Returns true if the vertex only has incoming edges."
   [graph vertex] 
   (and (>= (count (incoming graph vertex)) 0) (<= (count (outgoing graph vertex)) 0)))
 
 (defn- source? 
+  "Returns true if the vertex only has outgoing edges."
   [graph vertex] 
   (and (<= (count (incoming graph vertex)) 0) (> (count (outgoing graph vertex)) 0)))
 
 (defn- degree 
+  "Returns the number of incoming edges and the number of outgoing edges."
   [graph vertex] 
   (+ (count (outgoing graph vertex)) (count (incoming graph vertex))))
 
 (defn- highest-degree 
+  "Given a graph, returns the vertex with the highest degree."
   [graph]
   (let [result (atom nil)]
     (reduce-kv 
@@ -66,6 +75,7 @@
     @result))
 
 (defn- remove-vertex 
+  "Removes a vertex from the graph, updating the edges accordingly."
   [graph vertex] 
   (let [graph' (dissoc graph vertex)] 
     (reduce
@@ -75,6 +85,7 @@
         (keys graph')))) 
 
 (defn prune 
+  "Takes a predicate, removing all verticies for which the predicate returns true.  The predicate will be called with the graph and vertex as arguments."
    [graph pred] 
    (let [ks (keys graph)     
          to-remove (reduce 
