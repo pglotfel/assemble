@@ -28,7 +28,7 @@
 (defmethod parse-vertex :cycle
   [env {:keys [title type generator transform]} step _]
   
-  (case (some type-pred)
+  (case (some type-pred type)
     
     :safe 
     
@@ -47,7 +47,7 @@
 (defmethod parse-vertex :source
   [env {:keys [title type generator transform]} step _]    
     
-  (case (some type-pred)
+  (case (some type-pred type)
     
     :safe 
     
@@ -226,7 +226,6 @@
         ;#### Get the sources and cycles for future reference! ####
        
         [sources cycles flow] (let [result (group-by #(last (:type %)) with-deps)]
-                                (println result)
                                 [(:source result) (:cycle result) (concat (vals (dissoc result :source :cycle)))])
                    
         ;#### Compiler passes! ####
@@ -252,9 +251,7 @@
                                   (transduce (comp (map (fn [v] (update-in v [:type] 
                                                                            (fn [x]                                                                
                                                                               (if (= (first x) :unsafe)
-                                                                                (do 
-                                                                                  (println "Unsafe, aliasing")
-                                                                                  (assoc x (dec (count x)) :alias))
+                                                                                (assoc x (dec (count x)) :alias)
                                                                                 x)))))
                                                    
                                                    (remove (fn [x] 
