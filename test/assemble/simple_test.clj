@@ -10,7 +10,7 @@
 
 (defn manifold-connect 
   [in out] 
-  (s/connect in out {:upstream? true}))
+  (s/connect in out))
 
 (defn generator 
   [f] 
@@ -24,21 +24,19 @@
   
   (a/vertex :a [:c] generator
              
-             (fn 
-               ([] [1])
-               ([x] (println x) x)))
-  
+            (fn 
+              ([] [1])
+              ([x] (println x) x)))
+        
   (a/vertex :b [:a] generator
-             
-               (fn 
-                 ([] [1])
-                 ([x] x)))
+                   
+            (fn 
+              ([] [1])
+              ([x] x)))
     
-  (a/vertex :c [:b] 
-               
-             generator
+  (a/vertex :c [:b] generator
              
-               (fn 
-                 ([] [1])
-                 ([x] x))))
+            (fn 
+              ([] [1])
+              ([x] x))))
 

@@ -11,7 +11,9 @@
 
 ;Multimethods to handle the parsing of each type of vertex
 
-(def ^:private types [:mutable :safe :source :cyclic :sink :flow :aliased])
+(def ^:private types [:unsafe :safe :source :cycle :sink :flow :alias])
+
+(def ^:prviate type-pred #{:unsafe :safe})
 
 (defn- type-priority
   [to-be-sorted] 
@@ -23,15 +25,41 @@
 
 ;#### A vertex in a cycle ####
 
-(defmethod parse-vertex :cyclic
-  [env {:keys [title _ _]} step _]
-  (assoc env title (step)))
+(defmethod parse-vertex :cycle
+  [env {:keys [title type generator transform]} step _]
+  
+  (case (some type-pred)
+    
+    :safe 
+    
+    (assoc env ((generator transform)))
+    
+    :unsafe
+    
+    (assoc env title (step))
+    
+    (do 
+      (println "WARNING: No type detected for cycle " title " assuming unsafe")
+      (assoc env title (step)))))
 
 ;#### A vertex with only outgoing edges ####
 
 (defmethod parse-vertex :source
-  [env {:keys [title _ _]} step _]
-  (assoc env title (step)))
+  [env {:keys [title type generator transform]} step _]    
+    
+  (case (some type-pred)
+    
+    :safe 
+    
+    (assoc env ((generator transform)))
+    
+    :unsafe 
+    
+    (assoc env title (step))
+    
+    (do 
+      (println "WARNING: No type detected for source " title " assuming unsafe")
+      (assoc env title (step)))))
 
 ;#### A vertex with only incoming edges ####
 
@@ -47,7 +75,7 @@
 
 ;#### A vertex that has had its output aliased ####
 
-(defmethod parse-vertex :aliased 
+(defmethod parse-vertex :alias 
   [env {:keys [title generator transform dependencies]} _ con] 
   (con (apply (generator transform) (map env dependencies)) (title env))
   env)
@@ -123,7 +151,7 @@
   (doseq [v verticies]
     (let [deps (:dependencies v)
           pred (set deps)]
-      (assert (>= (count (filter (comp pred :title) verticies)) (count deps)) (str "Node " (:title v) "'s dependencies are not all in the supplied verticies."))))
+      (assert (>= (count (filter (comp pred :title) verticies)) (count deps)) (str "Node " (:title v) "'s dependencies are not entirely defined within the supplied verticies."))))
   
   (let [compiler (fn [env v] (parse-vertex env v step con))   
              
@@ -172,10 +200,12 @@
                           
                                         (fn [v]                            
                                           (if ((:title v) pred)
-                                            (update-in v [:type] #(conj % :unsafe :cyclic))
+                                            (update-in v [:type] #(conj % :unsafe :cycle))
                                             v))
                            
                                         ;#### Infer vertex types! ####
+                                        
+                                        ;TODO: break up safe/unsafe marking and primary type marking into separate steps to detect user influence!
                           
                                         (fn [v]   
                                           (if (:type v)
@@ -195,9 +225,9 @@
              
         ;#### Get the sources and cycles for future reference! ####
        
-        sources (filter #(= (last (:type %)) :source) with-deps)
-        
-        cycles (filter #(= (last  (:type %)) :cyclic) with-deps)
+        [sources cycles flow] (let [result (group-by #(last (:type %)) with-deps)]
+                                (println result)
+                                [(:source result) (:cycle result) (concat (vals (dissoc result :source :cycle)))])
                    
         ;#### Compiler passes! ####
              
@@ -209,11 +239,7 @@
                 
                                   ;#### Do a topological sort on the remaining nodes #### 
                                  
-                                  (let [non-cyclic (into {} (map (fn [v] [(:title v) v]) 
-                                                                 (remove (fn [v]                 
-                                                                           (let [primary-type (last (:type v))]
-                                                                             (or (= type :cyclic) (= type :source) (= type :dam))))                  
-                                                                           with-deps)))]
+                                  (let [non-cyclic (into {} (map (fn [v] [(:title v) v]) flow))]
                                           
                                     (->> 
                                             
@@ -221,9 +247,22 @@
                                             
                                       g/kahn-sort
                                             
-                                      (map non-cyclic)))
+                                      (map non-cyclic)))                                
                                            
-                                  (map (fn [v] (update-in v [:type] #(assoc % (dec (count %)) :aliased))) (concat sources cycles))))]
+                                  (transduce (comp (map (fn [v] (update-in v [:type] 
+                                                                           (fn [x]                                                                
+                                                                              (if (= (first x) :unsafe)
+                                                                                (do 
+                                                                                  (println "Unsafe, aliasing")
+                                                                                  (assoc x (dec (count x)) :alias))
+                                                                                x)))))
+                                                   
+                                                   (remove (fn [x] 
+                                                             (not (= (last (:type x)) :alias)))))
+                                             
+                                             conj 
+                                             
+                                             (concat sources cycles))))]
        
     ;#### Next, I need to start all of the cycles.  Ooo, side effects! I currently do this by finding a feedback vertex set (FVS) of each cycle ####
    
