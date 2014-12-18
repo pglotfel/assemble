@@ -142,12 +142,14 @@
   
   [title dependencies generator transform & {:keys [group type] :or {group nil type []}}]  
   (assoc v :title title :dependencies dependencies :generator generator :transform transform :group group :type type))
+
+;TODO: Make step and con optional via keyword!
     
 (defn assemble 
   [step con & verticies] 
   
   ;TODO: Implement some checks...
- 
+
   (let [ts (map :title verticies)]
     (assert (= (count ts) (count (distinct ts))) "Each vertex must have a distinct name!"))
   
@@ -159,7 +161,7 @@
   (let [compiler (fn [env v] (parse-vertex env v step con))   
              
         ;#### Expand dependencies and infer types! ####
-       
+      
         [sccs with-deps] (let [groups (-> 
                                         
                                         (reduce (fn [m {:keys [title group]}] 
@@ -177,59 +179,59 @@
                                transpose (g/transpose graph)
                                
                                ;#### Retrieve all of the strongly connected components.  In this case, everything in a cycle. ####
-                        
+                       
                                sccs (transduce (comp (remove (fn [vals] (if (= (count vals) 1) (let [val (vals 0)] (not (val (:edges (val graph)))))))) 
                                                      
-                                                     (remove empty?))
+                                                    (remove empty?))
                                                
-                                               conj 
+                                              conj 
                                                
-                                               (g/dijkstras graph))                                                                              
+                                              (g/dijkstras graph))                                                                              
                         
                                pred (apply (comp set concat) sccs)]   
-                           
+                          
                            [sccs (map (comp     
-                                                        
+                                                       
                                         ;#### Make sure types are prioritized properly. #### 
-                                        
+                                       
                                         (fn [v] 
                                           (update-in v [:type] #(vec (type-priority %))))
                                         
-                                        ;#### If not assigned by the user, assign safe/unsafe tags #### 
+                                       ;#### If not assigned by the user, assign safe/unsafe tags #### 
                                         
-                                        (fn [v]                                         
-                                          (let [type (:type v)]                                          
-                                            (if (> (count type) 1)                                             
-                                              v                                           
-                                              (case (last type)        
+                                       (fn [v]                                         
+                                         (let [type (:type v)]                                          
+                                           (if (> (count type) 1)                                             
+                                             v                                           
+                                             (case (last type)        
                                                 
-                                                :sink                                             
-                                                (update-in v [:type] #(conj % :safe))
+                                               :sink                                             
+                                               (update-in v [:type] #(conj % :safe))
                                                 
-                                                :source          
-                                                (update-in v [:type] #(conj % :unsafe))
+                                               :source          
+                                               (update-in v [:type] #(conj % :unsafe))
                                                 
-                                                :flow 
-                                                (update-in v [:type] #(conj % :safe))
+                                               :flow 
+                                               (update-in v [:type] #(conj % :safe))
                                                 
-                                                :cycle
-                                                ;#### Return vertex because we already handled cycle types earlier ####
-                                                v   
+                                               :cycle
+                                               ;#### Return vertex because we already handled cycle types earlier ####
+                                               v   
                                                 
-                                                (do 
-                                                  (println "WARNING: unknown type in vertex " (:title v) " assuming unsafe")
-                                                  (update-in v [:type] #(conj % :unsafe)))))))
+                                               (do 
+                                                 (println "WARNING: unknown type in vertex " (:title v) " assuming unsafe")
+                                                 (update-in v [:type] #(conj % :unsafe)))))))
                                    
                                         ;#### Tag components in cycles... ####   
-                          
+                         
                                         (fn [v]                            
                                           (if ((:title v) pred)
-                                            ;#### Type for cycles is set! #### 
-                                            (assoc v :type [:unsafe :cycle])
+                                           ;#### Type for cycles is set! #### 
+                                           (assoc v :type [:unsafe :cycle])
                                             v))
                            
                                         ;#### Infer vertex primary types! ####
-                          
+                         
                                         (fn [v]   
                                           (let [title (:title v)                              
                                                 graph-es (:edges (title graph))                               
@@ -245,12 +247,12 @@
                                       deps-expanded)])                                 
              
         ;#### Get the sources and cycles for future reference! ####
-       
+      
         [sources cycles flow] (let [result (group-by #(last (:type %)) with-deps)]
-                                [(:source result) (:cycle result) (apply concat (vals (dissoc result :source :cycle)))])
+                               [(:source result) (:cycle result) (apply concat (vals (dissoc result :source :cycle)))])
                    
         ;#### Compiler passes! ####
-             
+            
         env (reduce compiler {} (concat 
           
                                   sources 
@@ -258,26 +260,26 @@
                                   cycles 
                 
                                   ;#### Do a topological sort on the remaining nodes #### 
-                                 
+                                
                                   (let [not-source|cycle (into {} (map (fn [v] [(:title v) v]) flow))]
                                     
-                                    (transduce (comp (map not-source|cycle) (remove nil?)) conj (g/kahn-sort (make-graph (concat sources flow)))))                                
+                                   (transduce (comp (map not-source|cycle) (remove nil?)) conj (g/kahn-sort (make-graph (concat sources flow)))))                                
                                            
                                   (transduce (comp (map (fn [v] (update-in v [:type] 
-                                                                           (fn [x]                                                                
+                                                                          (fn [x]                                                                
                                                                              (if (= (first x) :unsafe)
                                                                                (assoc x (dec (count x)) :alias)
                                                                                x)))))
                                                    
                                                    (remove (fn [x] 
-                                                             (not (= (last (:type x)) :alias)))))
+                                                            (not (= (last (:type x)) :alias)))))
                                              
                                              conj 
                                              
                                              (concat sources cycles))))]
        
     ;#### Next, I need to start all of the cycles.  Ooo, side effects! I currently do this by finding a feedback vertex set (FVS) of each cycle ####
-   
+  
     (doseq [v (| (mapcat (fn [group] (g/fvs (make-graph (filter (comp (set group) :title) cycles)))) sccs)
               
                  #(filter (comp (set %) :title) cycles) 
@@ -289,8 +291,7 @@
       (step ((:title v) env) ((:transform v))))
     
     ;#### Associate streams back into the verticies! ####
-
-    (map (fn [a b] (assoc a :output ((:title a) env) :type (:type b))) verticies with-deps)))
+    (map (fn [a b] (assoc a :output ((:title a) env) :type (:type b))) verticies with-deps)))
 
 (defn output 
   "Retrieves the output of a given body" 
