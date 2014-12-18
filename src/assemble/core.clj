@@ -7,17 +7,19 @@
 
 (set! *warn-on-reflection* true)
 
-;#### Investigate ways to add more than one type! #### 
-
 ;Multimethods to handle the parsing of each type of vertex
 
 (def ^:private types [:unsafe :safe :source :cycle :sink :flow :alias])
 
 (def ^:prviate type-pred #{:unsafe :safe})
 
+(defn none 
+  ([] (throw (IllegalArgumentException. "Can't call none!")))
+  ([& xs] (throw (IllegalArgumentException. "Can't call none!"))))
+
 (defn- type-priority
   [to-be-sorted] 
-  (sort-by (fn [x] (.indexOf ^clojure.lang.PersistentVector types x) to-be-sorted) to-be-sorted))
+  (sort-by (fn [x] (.indexOf ^clojure.lang.PersistentVector types x)) to-be-sorted))
 
 (defmulti parse-vertex 
   (fn [env vertex step con]
@@ -32,7 +34,7 @@
     
     :safe 
     
-    (assoc env ((generator transform)))
+    (assoc env title ((generator transform)))
     
     :unsafe
     
@@ -51,7 +53,7 @@
     
     :safe 
     
-    (assoc env ((generator transform)))
+    (assoc env title ((generator transform)))
     
     :unsafe 
     
@@ -122,6 +124,7 @@
    :dependencies []
    :generator (fn [f])
    :transform (fn [x])
+   :type []
    :group :verticies}
 
    Title is an identifier that uniquely defines the vertex. 
@@ -143,7 +146,7 @@
 (defn assemble 
   [step con & verticies] 
   
-  ;Implement some checks...
+  ;TODO: Implement some checks...
  
   (let [ts (map :title verticies)]
     (assert (= (count ts) (count (distinct ts))) "Each vertex must have a distinct name!"))
@@ -175,58 +178,76 @@
                                
                                ;#### Retrieve all of the strongly connected components.  In this case, everything in a cycle. ####
                         
-                               sccs (->>
-                                      
-                                      (g/dijkstras graph)                                                                      
-                                                                       
-                                      (remove
-                                        (fn [vals]
-                                          (if (= (count vals) 1)
-                                            (let [val (vals 0)]
-                                            (not (val (:edges (val graph))))))))
-                                      
-                                      (remove empty?))                                                           
+                               sccs (transduce (comp (remove (fn [vals] (if (= (count vals) 1) (let [val (vals 0)] (not (val (:edges (val graph)))))))) 
+                                                     
+                                                     (remove empty?))
+                                               
+                                               conj 
+                                               
+                                               (g/dijkstras graph))                                                                              
                         
                                pred (apply (comp set concat) sccs)]   
-                    
+                           
                            [sccs (map (comp     
-                                        
+                                                        
                                         ;#### Make sure types are prioritized properly. #### 
                                         
                                         (fn [v] 
                                           (update-in v [:type] #(vec (type-priority %))))
+                                        
+                                        ;#### If not assigned by the user, assign safe/unsafe tags #### 
+                                        
+                                        (fn [v]                                         
+                                          (let [type (:type v)]                                          
+                                            (if (> (count type) 1)                                             
+                                              v                                           
+                                              (case (last type)        
+                                                
+                                                :sink                                             
+                                                (update-in v [:type] #(conj % :safe))
+                                                
+                                                :source          
+                                                (update-in v [:type] #(conj % :unsafe))
+                                                
+                                                :flow 
+                                                (update-in v [:type] #(conj % :safe))
+                                                
+                                                :cycle
+                                                ;#### Return vertex because we already handled cycle types earlier ####
+                                                v   
+                                                
+                                                (do 
+                                                  (println "WARNING: unknown type in vertex " (:title v) " assuming unsafe")
+                                                  (update-in v [:type] #(conj % :unsafe)))))))
                                    
                                         ;#### Tag components in cycles... ####   
                           
                                         (fn [v]                            
                                           (if ((:title v) pred)
-                                            (update-in v [:type] #(conj % :unsafe :cycle))
+                                            ;#### Type for cycles is set! #### 
+                                            (assoc v :type [:unsafe :cycle])
                                             v))
                            
-                                        ;#### Infer vertex types! ####
-                                        
-                                        ;TODO: break up safe/unsafe marking and primary type marking into separate steps to detect user influence!
+                                        ;#### Infer vertex primary types! ####
                           
                                         (fn [v]   
-                                          (if (:type v)
-                                            v
-                                            (let [title (:title v)                              
-                                                  graph-es (:edges (title graph))                               
-                                                  transpose-es (:edges (title transpose))]                            
-                                              (if (empty? graph-es)
-                                                (if (empty? transpose-es)
-                                                  (throw (IllegalArgumentException. (str "You have a vertex, " title ", with no dependencies and no dependents")))
-                                                  (update-in v [:type] #(conj % :safe :sink)))
-                                                (if (empty? transpose-es)
-                                                  (update-in v [:type] #(conj % :unsafe :source))
-                                                  (update-in v [:type] #(conj % :safe :flow)))))))) 
+                                          (let [title (:title v)                              
+                                                graph-es (:edges (title graph))                               
+                                                transpose-es (:edges (title transpose))]                            
+                                            (if (empty? graph-es)
+                                              (if (empty? transpose-es)
+                                                (throw (IllegalArgumentException. (str "You have a vertex, " title ", with no dependencies and no dependents")))
+                                                (update-in v [:type] #(conj % :sink)))
+                                              (if (empty? transpose-es)
+                                                (update-in v [:type] #(conj % :source))
+                                                (update-in v [:type] #(conj % :flow))))))) 
                          
                                       deps-expanded)])                                 
              
         ;#### Get the sources and cycles for future reference! ####
        
         [sources cycles flow] (let [result (group-by #(last (:type %)) with-deps)]
-                                [(:source result) (:cycle result) (concat (vals (dissoc result :source :cycle)))])
+                                [(:source result) (:cycle result) (apply concat (vals (dissoc result :source :cycle)))])
                    
         ;#### Compiler passes! ####
              
@@ -238,21 +259,15 @@
                 
                                   ;#### Do a topological sort on the remaining nodes #### 
                                  
-                                  (let [non-cyclic (into {} (map (fn [v] [(:title v) v]) flow))]
-                                          
-                                    (->> 
-                                            
-                                      (make-graph (vals non-cyclic))
-                                            
-                                      g/kahn-sort
-                                            
-                                      (map non-cyclic)))                                
+                                  (let [not-source|cycle (into {} (map (fn [v] [(:title v) v]) flow))]
+                                    
+                                    (transduce (comp (map not-source|cycle) (remove nil?)) conj (g/kahn-sort (make-graph (concat sources flow)))))                                
                                            
                                   (transduce (comp (map (fn [v] (update-in v [:type] 
                                                                            (fn [x]                                                                
-                                                                              (if (= (first x) :unsafe)
-                                                                                (assoc x (dec (count x)) :alias)
-                                                                                x)))))
+                                                                             (if (= (first x) :unsafe)
+                                                                               (assoc x (dec (count x)) :alias)
+                                                                               x)))))
                                                    
                                                    (remove (fn [x] 
                                                              (not (= (last (:type x)) :alias)))))

@@ -1,42 +1,18 @@
 (ns assemble.simple-test
-  (:require [assemble.core :as a]
-            [manifold.stream :as s]
-            [manifold.deferred :as d]))
+  (:require [assemble.core :as a]))
 
-(defn manifold-step 
-  ([] (s/stream))
-  ([s] (s/close! s))
-  ([s input] (s/put! s input)))
 
-(defn manifold-connect 
-  [in out] 
-  (s/connect in out))
-
-(defn generator 
-  [f] 
-  (fn [stream] (s/map f stream)))
-
-(a/assemble
+(time 
+  (a/assemble
   
-  manifold-step 
+    a/none
   
-  manifold-connect
-  
-  (a/vertex :a [:c] generator
-             
-            (fn 
-              ([] [1])
-              ([x] (println x) x)))
+    a/none
+
+    (a/vertex :a [] (fn [f] (fn [] (f))) (fn [] 1) :type [:safe])
         
-  (a/vertex :b [:a] generator
-                   
-            (fn 
-              ([] [1])
-              ([x] x)))
-    
-  (a/vertex :c [:b] generator
-             
-            (fn 
-              ([] [1])
-              ([x] x))))
+    (a/vertex :b [:a] (fn [f] (fn [x] (f x))) (fn [x] (inc x)))))
+
+
+
 
