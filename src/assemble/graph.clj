@@ -13,19 +13,20 @@
   "Returns true if the vertex has outgoing edges."
   [graph vertex] 
   (> (count (:edges (graph vertex))) 0))
-    
 
-(defn transpose 
+(defn transpose
   "Returns the transpose of a graph (e.g., directions of all edges reversed)."
-  [graph]  
-  (let [nodes (keys graph)] 
-    (apply merge (map (fn [node]        
-                         {node {:edges (reduce (fn [edges k]                                
-                                                 (if (node (:edges (k graph)))                             
-                                                   (conj edges k)                                          
-                                                   edges))                            
-                                               #{} nodes)}})                    
-                      nodes))))
+  [graph] 
+  (let [nodes (keys graph)]
+    (reduce 
+      (fn [m v]
+        (reduce 
+          (fn [m u]
+            (update-in m [u :edges] (fn [x] (conj x v))))
+          m 
+          (:edges (v graph))))
+      (reduce (fn [m v] (assoc m v {:edges #{}})) {} nodes)
+      nodes)))
 
 (defn outgoing 
   "Returns the number of outgoing edges of a vertex."
@@ -141,7 +142,7 @@
       (let [n (first s)            
             m (:edges (n graph))         
             graph' (reduce (fn [g v] (update-in g [n :edges] disj v)) graph m)]     
-        (recur graph' (conj l n) (concat (rest s) (filter (comp #(not (incoming? graph' %)) m) (keys graph'))))))))
+        (recur graph' (conj l n) (concat (rest s) (remove #(incoming? graph' %) m)))))))
 
 (defn fvs 
   "Calculates an fvs given a graph by implementing a slightly altered version of the algorithm described in http://www.sciencedirect.com/science/article/pii/002001909390079O"
