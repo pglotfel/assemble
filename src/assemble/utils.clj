@@ -12,14 +12,11 @@
     coll))
 
 (defn containsv? 
-  [coll key]
-  (reduce 
-    (fn [contains? v]
-      (if (= v key)
-        (reduced true)
-        contains?))
-    false 
-    coll))
+  [^clojure.lang.PersistentVector coll key]
+  (let [ val (.indexOf coll key)]
+    (if (not= val -1) 
+      val 
+      -1)))
 
 (defn | 
   [init & fns] 

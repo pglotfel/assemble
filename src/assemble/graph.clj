@@ -17,7 +17,7 @@
 (defn transpose
   "Returns the transpose of a graph (e.g., directions of all edges reversed)."
   [graph] 
-  (let [nodes (keys graph)]
+  (let [verticies (keys graph)]
     (reduce 
       (fn [m v]
         (reduce 
@@ -25,8 +25,8 @@
             (update-in m [u :edges] (fn [x] (conj x v))))
           m 
           (:edges (v graph))))
-      (reduce (fn [m v] (assoc m v {:edges #{}})) {} nodes)
-      nodes)))
+      (reduce (fn [m v] (assoc m v {:edges #{}})) {} verticies)
+      verticies)))
 
 (defn outgoing 
   "Returns the number of outgoing edges of a vertex."
@@ -62,13 +62,13 @@
 (defn- highest-degree 
   "Given a graph, returns the vertex with the highest degree."
   [graph]
-  (let [result (atom nil)]
+  (let [result (volatile! nil)]
     (reduce-kv 
       (fn [max k v]         
         (let [deg (degree graph k)]
           (if (> deg max) 
             (do
-              (reset! result k)
+              (vreset! result k)
               deg)
             max)))
       -1
@@ -77,16 +77,16 @@
 
 (defn- remove-vertex 
   "Removes a vertex from the graph, updating the edges accordingly."
-  [graph vertex] 
-  (let [graph' (dissoc graph vertex)] 
+  [graph & vertices] 
+  (let [graph' (apply dissoc graph vertices)] 
     (reduce
         (fn [m k]          
-          (update-in m [k] (fn [v] (update-in v [:edges] (fn [es] (disj es vertex))))))
+          (update-in m [k] (fn [v] (update-in v [:edges] (fn [es] (apply disj es vertices))))))
         graph'
         (keys graph')))) 
 
 (defn prune 
-  "Takes a predicate, removing all verticies for which the predicate returns true.  The predicate will be called with the graph and vertex as arguments."
+  "Takes a predicate, removing all verticies for which the predicate returns true.  The predicate will be called with the graph and vertex as arguments.  Returns false if none of the predicates returned true."
    [graph pred] 
    (let [ks (keys graph)     
          to-remove (reduce 
@@ -96,33 +96,39 @@
                          coll))
                      #{}
                      ks)]   
-     (reduce 
-       remove-vertex
-       graph 
-       to-remove)))
+     (if (empty? to-remove)
+       false
+       (apply remove-vertex graph to-remove))))
 
+(defn- try-until 
+  [preds & inputs] 
+  (reduce
+    (fn [result pred] 
+      (if (apply pred inputs)
+        (reduced true)
+        result))
+    false 
+    preds))
 
-(defn remove-sinks 
-  "Recursively removes sinks in a graph until none remain"
-  [graph] 
+(defn continuously-remove 
+  [graph & preds] 
   (let [helper (fn this 
-                 [g]
-                 (let [result (prune g (fn [g v] (sink? g v)))]
-                   (if (= result g)
-                     g 
-                     #(this result))))]
+                 [g] 
+                 (let [result (prune g (fn [g v] (try-until preds g v)))]
+                   (if result
+                     #(this result)
+                     g)))]
     (trampoline helper graph)))
 
 (defn remove-sources 
   "Recursively removes sources in a graph until none remain"
   [graph]
-  (let [helper (fn this 
-                 [g]
-                 (let [result (prune g (fn [g v] (source? g v)))]
-                   (if (= result g)
-                     g 
-                     #(this result))))]
-    (trampoline helper graph)))
+  (continuously-remove graph source?))
+
+(defn remove-sinks 
+  "Recursively removes sinks in a graph until none remain"
+  [graph] 
+  (continuously-remove graph sink?))
 
 (defn to-graph 
   [graph f] 
@@ -144,35 +150,19 @@
             graph' (reduce (fn [g v] (update-in g [n :edges] disj v)) graph m)]     
         (recur graph' (conj l n) (concat (rest s) (remove #(incoming? graph' %) m)))))))
 
+;Change this into a feedback arc set implementation.  Will simplify initial conditions injection
+
 (defn fvs 
   "Calculates an fvs given a graph by implementing a slightly altered version of the algorithm described in http://www.sciencedirect.com/science/article/pii/002001909390079O"
   [graph]
   (let [helper (fn this [coll graph] 
-                 (let [graph++ (-> 
-                                 (prune graph (fn [g v] (:marked (g v))))
-                                 remove-sinks
-                                 remove-sources)]     
-                   (if (empty? graph++)
+                 (let [graph' (continuously-remove graph sink? source?)]     
+                   (if (empty? graph')
                      coll
-                     (let [vertex (highest-degree graph++)]                                     
-                       #(this (conj coll vertex) (-> 
-                                                   
-                                                   (to-graph graph++ (fn [v k] 
-                                                                       (if (and (contains? (:edges v) vertex) (contains? (:edges (vertex graph)) k))
-                                                                         (assoc v :marked true)
-                                                                         v)))
-                                                   
-                                                   (remove-vertex vertex)))))))
-        
-        result (trampoline helper [] graph)]
-    
-    ;Ensure that removal of vertices makes a DAG
+                     (let [vertex (highest-degree graph')]                                     
+                       #(this (conj coll vertex) (remove-vertex graph' vertex))))))]
   
-    (if (kahn-sort (reduce remove-vertex graph result))
-      result
-      (do 
-        (println "WARNING: cycles may not start correctly!")
-        result))))
+    (trampoline helper [] graph)))
 
 ;Make this implementation more functional
 
