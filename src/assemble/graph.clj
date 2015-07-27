@@ -2,12 +2,14 @@
   (:require [clojure.set :as s])
   (:use [assemble.utils]))
 
+;convert these functions to the faster forms that I already made 
+
+;Change the format to {:vertex {:edges #{} :pi #{}}}
+
 (defn incoming? 
   "Returns true if the vertex has incoming edges."
   [graph vertex] 
-  (if vertex
-    (some (comp vertex :edges) (vals graph))
-    true))
+  (> (count (:pi (vertex graph)))))
 
 (defn outgoing? 
   "Returns true if the vertex has outgoing edges."
@@ -17,16 +19,13 @@
 (defn transpose
   "Returns the transpose of a graph (e.g., directions of all edges reversed)."
   [graph] 
-  (let [verticies (keys graph)]
-    (reduce 
-      (fn [m v]
-        (reduce 
-          (fn [m u]
-            (update-in m [u :edges] (fn [x] (conj x v))))
-          m 
-          (:edges (v graph))))
-      (reduce (fn [m v] (assoc m v {:edges #{}})) {} verticies)
-      verticies)))
+  (reduce-kv
+    (fn [g k v]   
+      (-> 
+        (assoc-in g [k :edges] (:pi v))
+        (assoc-in [k :pi] (:edges v))))
+    {}
+    graph))
 
 (defn outgoing 
   "Returns the number of outgoing edges of a vertex."
@@ -210,8 +209,11 @@
           (vswap! p pop)))))
   
                 
-  
+(def g {:a {:edges #{:b} :pi #{}} :b {:edges #{} :pi #{:c}}})
 
+(incoming? g :a)
+
+(transpose g)
 
 
 
