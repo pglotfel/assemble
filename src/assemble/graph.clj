@@ -9,7 +9,7 @@
 (defn incoming? 
   "Returns true if the vertex has incoming edges."
   [graph vertex] 
-  (> (count (:pi (vertex graph)))))
+  (> (count (:pi (vertex graph))) 0))
 
 (defn outgoing? 
   "Returns true if the vertex has outgoing edges."
@@ -35,13 +35,7 @@
 (defn incoming 
   "Returns the number of incoming edges of a vertex."
   [graph vertex] 
-  (reduce-kv 
-    (fn [coll k v] 
-      (if (contains? (:edges v) vertex)
-        (conj coll k)
-        coll))
-    []
-    graph))
+  (:pi (vertex graph)))
 
 (defn- sink? 
   "Returns true if the vertex only has incoming edges."
@@ -52,6 +46,16 @@
   "Returns true if the vertex only has outgoing edges."
   [graph vertex] 
   (and (<= (count (incoming graph vertex)) 0) (> (count (outgoing graph vertex)) 0)))
+
+(defn sources 
+  [graph] 
+  (reduce 
+    (fn [coll u] 
+      (if (source? graph u)
+        (conj coll u)
+        coll))
+    []
+    (keys graph)))
 
 (defn- degree 
   "Returns the number of incoming edges and the number of outgoing edges."
@@ -74,68 +78,77 @@
       graph)
     @result))
 
-(defn- remove-vertex 
-  "Removes a vertex from the graph, updating the edges accordingly."
-  [graph & vertices] 
-  (let [graph' (apply dissoc graph vertices)] 
-    (reduce
-        (fn [m k]          
-          (update-in m [k] (fn [v] (update-in v [:edges] (fn [es] (apply disj es vertices))))))
-        graph'
-        (keys graph')))) 
+(defn add-edge 
+  [graph u v]
+  (-> 
+    (update-in graph [u :edges] (fn [x] (conj x v)))
+    (update-in [v :pi] (fn [x] (conj x u)))))
 
-(defn prune 
-  "Takes a predicate, removing all verticies for which the predicate returns true.  The predicate will be called with the graph and vertex as arguments.  Returns false if none of the predicates returned true."
-   [graph pred] 
-   (let [ks (keys graph)     
-         to-remove (reduce 
-                     (fn [coll k] 
-                       (if (pred graph k)
-                         (conj coll k) 
-                         coll))
-                     #{}
-                     ks)]   
-     (if (empty? to-remove)
-       false
-       (apply remove-vertex graph to-remove))))
+(defn remove-edge 
+  "Removes an edges, updating edges and pis accordingly."
+  [graph u v]
+  (-> 
+    (update-in graph [u :edges] (fn [x] (disj x v)))
+    (update-in [v :pi] (fn [x] (disj x u)))))
 
-(defn- try-until 
-  [preds & inputs] 
-  (reduce
-    (fn [result pred] 
-      (if (apply pred inputs)
-        (reduced true)
-        result))
-    false 
-    preds))
+(defn remove-edges 
+  [graph u & vs] 
+  (reduce (fn [g v] (remove-edge g u v)) graph vs))
 
-(defn continuously-remove 
-  [graph & preds] 
-  (let [helper (fn this 
-                 [g] 
-                 (let [result (prune g (fn [g v] (try-until preds g v)))]
-                   (if result
-                     #(this result)
-                     g)))]
-    (trampoline helper graph)))
+(defn remove-vertex
+  [graph v] 
+  (|
+    (reduce (fn [g u] (remove-edge g v u)) graph (:edges (v graph)))
+    #(reduce (fn [g u] (remove-edge g u v)) % (:pi (v graph)))
+    #(dissoc % v)))
 
-(defn remove-sources 
-  "Recursively removes sources in a graph until none remain"
-  [graph]
-  (continuously-remove graph source?))
+(defn remove-vertices
+  [graph & vs] 
+  (reduce remove-vertex graph vs))
 
-(defn remove-sinks 
-  "Recursively removes sinks in a graph until none remain"
+(defn remove-source 
+  [graph vertex] 
+  "Removes a source from the graph and recursively ensures that none of its descendents are sources."
+  (if (source? graph vertex)
+    (| 
+      (remove-vertex graph vertex)
+       
+      #(reduce 
+          remove-source
+          % 
+          (:edges (vertex graph))))
+    
+    graph))
+
+(defn remove-sink
+  "Removes a sink from the graph and recursively ensures that none of its predecessors are sources."
+  [graph vertex] 
+  (if (sink? graph vertex)
+    (| 
+      (remove-vertex graph vertex)
+      
+      #(reduce 
+          remove-sink
+          % 
+          (:pi (vertex graph))))
+    
+    graph))
+
+(defn remove-sources
+  "Recursively removes all the sources in a graph"
   [graph] 
-  (continuously-remove graph sink?))
-
-(defn to-graph 
-  [graph f] 
-  (reduce
-        (fn [m k]          
-          (update-in m [k] f k))
-        graph
-        (keys graph)))
+  (reduce 
+    remove-source
+    graph 
+    (keys graph)))
+    
+(defn remove-sinks
+  "Recursively removes all the sinks in a graph"
+  [graph] 
+  (reduce 
+    remove-sink
+    graph 
+    (keys graph)))
 
 (defn kahn-sort  
   "Topologically sorts a graph using the kahn algorithm, where graph is a DAG graph in the style {:vertex {:edges #{...}}}, l is the resulting order, and s is the nodes to be traversed." 
@@ -146,16 +159,21 @@
         l)  
       (let [n (first s)            
             m (:edges (n graph))         
-            graph' (reduce (fn [g v] (update-in g [n :edges] disj v)) graph m)]     
+            graph' (apply remove-edges graph n m)]     
         (recur graph' (conj l n) (concat (rest s) (remove #(incoming? graph' %) m)))))))
 
 ;Change this into a feedback arc set implementation.  Will simplify initial conditions injection
 
-(defn fvs 
-  "Calculates an fvs given a graph by implementing a slightly altered version of the algorithm described in http://www.sciencedirect.com/science/article/pii/002001909390079O"
+(defn fas
+  "Calculates an fas given a graph by implementing a slightly altered version of the algorithm described in http://www.sciencedirect.com/science/article/pii/002001909390079O"
   [graph]
   (let [helper (fn this [coll graph] 
-                 (let [graph' (continuously-remove graph sink? source?)]     
+                 (let [graph' (-> 
+                                
+                               (remove-sinks graph)
+                                
+                               remove-sources)]     
+           
                    (if (empty? graph')
                      coll
                      (let [vertex (highest-degree graph')]                                     
@@ -208,12 +226,7 @@
                 (recur @s (conj cs (last s'))))))
           (vswap! p pop)))))
   
-                
-(def g {:a {:edges #{:b} :pi #{}} :b {:edges #{} :pi #{:c}}})
-
-(incoming? g :a)
-
-(transpose g)
+               
 
 
 

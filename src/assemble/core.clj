@@ -287,14 +287,73 @@
     ;#### Associate streams back into the verticies! ####
     (map (fn [a b] (assoc a :output ((:title a) env) :type (:type b))) verticies with-deps)))
 
-(defn output 
-  "Retrieves the output of a given body" 
-  [title & verticies]  
-  (:output (find-first #(= (:title %) title) verticies)))
+(defn build-graph' 
+  [& vertices] 
+  (let [vs (mapv :title vertices)
+        pis (mapv :dependencies vertices)
+        graph (apply hash-map (interleave vs (repeat (count vs) {:edges #{} :pi #{}})))]
+    
+    (reduce-kv       
+      (fn [g car v]       
+        (reduce 
+          (fn [g' u]
+            (g/add-edge g' u v))
+          g 
+          (pis car)))
+      graph 
+      vs)))
 
+(defn secure-vertices
+  [graph & {:keys [vertices]}]
   
+  (let [sources (g/sources graph)]
+    
+    (reduce 
+      (fn [g u])
+      graph
   
+  )
   
+
+(defn assemble' 
+  [& vertices]
+  
+  ;(assoc env title (apply (generator transform) (map env dependencies))) should use for all...
+  
+  (let [graph (apply build-graph' vertices)
+        sources (g/sources graph)
+        order (vec (concat sources (g/kahn-sort (apply g/remove-vertices graph sources))))]
+       
+    (reduce
+              
+      (fn [env {:keys [title generator transform dependencies]}] 
+                
+        (assoc env title (apply (generator transform) (map env dependencies))))
+      
+      {}
+      
+      (sort-by (fn [x] (.indexOf ^clojure.lang.PersistentVector order (:title x))) vertices))))
+
+;a -> b...  output of b is
+
+(defn manifold-gen 
+  [f] 
+  (fn 
+    ([] (s/stream))
+    ([stream] (s/map f stream))))
+
+(defn print-and-inc
+  [x]
+  (println x)
+  (inc x))
+
+;Add a new function called post...(fn [stream & streams]) 
+;The first streams is that vertex's output.  The rest are its deps
+
+(def test-vs [{:title :a :dependencies [:b] :generator manifold-gen  :transform print-and-inc} 
+              {:title :b :dependencies [:c] :generator manifold-gen :transform print-and-inc} 
+              {:title :c :dependencies [] :generator manifold-gen :transform print-and-inc}])
+
   
   
   
